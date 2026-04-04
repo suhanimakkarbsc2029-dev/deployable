@@ -36,8 +36,8 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  // Protect all /dashboard/* routes
-  if (pathname.startsWith("/dashboard") && !user) {
+  // Protect /dashboard/* and /onboarding routes
+  if ((pathname.startsWith("/dashboard") || pathname.startsWith("/onboarding")) && !user) {
     const loginUrl = request.nextUrl.clone()
     loginUrl.pathname = "/login"
     loginUrl.searchParams.set("redirectedFrom", pathname)
@@ -51,6 +51,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Redirect already-authenticated users away from login/signup
+  // (but NOT away from /onboarding — they need to complete that first)
   if ((pathname === "/login" || pathname === "/signup") && user) {
     const dashboardUrl = request.nextUrl.clone()
     dashboardUrl.pathname = "/dashboard"

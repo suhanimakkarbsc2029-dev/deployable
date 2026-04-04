@@ -11,7 +11,6 @@ import {
   ChevronDown, ArrowUpRight, RefreshCcw,
 } from "lucide-react"
 import KPICard from "@/components/dashboard/KPICard"
-import ConnectMetaBanner from "@/components/dashboard/ConnectMetaBanner"
 import { KPICardSkeleton, ChartSkeleton, TableRowSkeleton } from "@/components/dashboard/Skeletons"
 import { kpiData, dailyOrdersData } from "@/lib/mock-data"
 import { formatINR } from "@/lib/utils"
@@ -58,6 +57,7 @@ export default function DashboardPage() {
 
   const [insights, setInsights] = useState<InsightsResponse | null>(null)
   const [ads, setAds] = useState<AdsResponse | null>(null)
+  const [pixelOrders, setPixelOrders] = useState<number | null>(null)
   const [loadingInsights, setLoadingInsights] = useState(true)
   const [loadingAds, setLoadingAds] = useState(true)
 
@@ -67,13 +67,17 @@ export default function DashboardPage() {
     setLoadingInsights(true)
     setLoadingAds(true)
 
-    const [insRes, adsRes] = await Promise.all([
+    const [insRes, adsRes, pixelRes] = await Promise.all([
       fetch(`/api/meta/insights?date_preset=${preset}`).then((r) => r.json() as Promise<InsightsResponse>),
       fetch(`/api/meta/ads?date_preset=${preset}`).then((r) => r.json() as Promise<AdsResponse>),
+      fetch(`/api/website/stats?date_preset=${preset}`).then((r) => r.json()).catch(() => null),
     ])
 
     setInsights(insRes)
     setAds(adsRes)
+    if (pixelRes?.data?.orderCount != null) {
+      setPixelOrders(pixelRes.data.orderCount)
+    }
     setLoadingInsights(false)
     setLoadingAds(false)
   }, [preset])
@@ -84,46 +88,55 @@ export default function DashboardPage() {
   const daily = insights?.data.daily ?? []
   const connected = insights?.connected ?? false
 
-  // Build KPIs — use live data when available, else mock
+  // Derive real KPI values — use live data when available, show "—" when not connected
+  const liveRoas = agg?.roas
+  const liveRevenue = agg?.revenue
+  const liveSpend = agg?.spend
+  const liveOrders = pixelOrders
+  const liveCac = liveSpend && liveOrders ? Math.round(liveSpend / liveOrders) : null
+  const liveMer = liveRevenue && liveSpend && liveSpend > 0
+    ? parseFloat((liveRevenue / liveSpend).toFixed(2))
+    : null
+
   const kpis = [
     {
       title: "ROAS",
-      value: agg ? `${agg.roas}x` : `${kpiData.roas}x`,
+      value: connected && liveRoas != null ? `${liveRoas}x` : connected ? "—" : `${kpiData.roas}x`,
       delta: kpiData.roasDelta,
       icon: TrendingUp,
       iconColor: "text-cyan-400",
     },
     {
       title: "Revenue",
-      value: agg ? formatINR(agg.revenue) : formatINR(kpiData.revenue),
+      value: connected && liveRevenue != null ? formatINR(liveRevenue) : connected ? "—" : formatINR(kpiData.revenue),
       delta: kpiData.revenueDelta,
       icon: DollarSign,
       iconColor: "text-emerald-400",
     },
     {
       title: "Ad Spend",
-      value: agg ? formatINR(agg.spend) : formatINR(kpiData.adSpend),
+      value: connected && liveSpend != null ? formatINR(liveSpend) : connected ? "—" : formatINR(kpiData.adSpend),
       delta: kpiData.adSpendDelta,
       icon: Target,
       iconColor: "text-blue-400",
     },
     {
       title: "Orders",
-      value: kpiData.orders.toLocaleString("en-IN"),
+      value: liveOrders != null ? liveOrders.toLocaleString("en-IN") : "—",
       delta: kpiData.ordersDelta,
       icon: ShoppingBag,
       iconColor: "text-violet-400",
     },
     {
       title: "CAC",
-      value: `₹${kpiData.cac}`,
+      value: liveCac != null ? `₹${liveCac}` : "—",
       delta: kpiData.cacDelta,
       icon: Users,
       iconColor: "text-pink-400",
     },
     {
       title: "MER",
-      value: `${kpiData.mer}x`,
+      value: liveMer != null ? `${liveMer}x` : "—",
       delta: kpiData.merDelta,
       icon: BarChart3,
       iconColor: "text-amber-400",
@@ -190,7 +203,28 @@ export default function DashboardPage() {
 
       {/* Connect banner (shown when not connected) */}
       {!loadingInsights && !connected && (
-        <ConnectMetaBanner compact />
+        <div className="mb-6 rounded-xl border border-amber-500/20 bg-amber-500/8 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-center gap-3 flex-1">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/20 flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="#f59e0b">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-amber-400">Showing demo data</p>
+              <p className="text-xs text-slate-400">Connect your Meta Ads account to see live performance metrics.</p>
+            </div>
+          </div>
+          <a
+            href="/api/meta/auth"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1877f2]/15 border border-[#1877f2]/30 text-[#4a9eff] text-sm font-semibold hover:bg-[#1877f2]/25 transition-all whitespace-nowrap flex-shrink-0"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+            </svg>
+            Connect Meta Ads
+          </a>
+        </div>
       )}
 
       {/* KPI Grid */}

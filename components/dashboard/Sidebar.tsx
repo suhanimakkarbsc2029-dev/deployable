@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
@@ -17,7 +17,11 @@ import {
   ChevronRight,
   Menu,
   X,
+  CheckCircle2,
+  Link2,
+  Link2Off,
 } from "lucide-react"
+
 import { createClient } from "@/lib/supabase/client"
 
 const navItems = [
@@ -28,7 +32,7 @@ const navItems = [
 ]
 
 const bottomItems = [
-  { href: "#", icon: Settings, label: "Settings" },
+  { href: "/dashboard/settings", icon: Settings, label: "Settings" },
   { href: "#", icon: HelpCircle, label: "Help" },
 ]
 
@@ -36,14 +40,31 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [metaConnected, setMetaConnected] = useState<boolean | null>(null)
+  const [disconnecting, setDisconnecting] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
+
+  useEffect(() => {
+    fetch("/api/meta/status")
+      .then((r) => r.json())
+      .then((d) => setMetaConnected(d.connected))
+      .catch(() => setMetaConnected(false))
+  }, [pathname])
 
   async function handleLogout() {
     setLoggingOut(true)
     const supabase = createClient()
     await supabase.auth.signOut()
     router.push("/login")
+    router.refresh()
+  }
+
+  async function handleDisconnect() {
+    setDisconnecting(true)
+    await fetch("/api/meta/disconnect", { method: "DELETE" })
+    setMetaConnected(false)
+    setDisconnecting(false)
     router.refresh()
   }
 
@@ -66,7 +87,7 @@ export default function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 p-3 space-y-1">
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const active = pathname === item.href
           return (
@@ -91,6 +112,80 @@ export default function Sidebar() {
             </Link>
           )
         })}
+
+        {/* Connected Accounts section */}
+        {(!collapsed || mobile) && (
+          <div className="pt-4 pb-1">
+            <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-widest px-3 mb-2">
+              Connected Accounts
+            </p>
+            <div className="rounded-xl border border-white/8 bg-white/3 p-3 space-y-2">
+              {/* Meta Ads row */}
+              <div className="flex items-center gap-2.5">
+                {/* Meta icon */}
+                <div className="w-7 h-7 rounded-lg bg-[#1877f2]/15 border border-[#1877f2]/20 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="#1877f2">
+                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-white leading-none mb-0.5">Meta Ads</p>
+                  {metaConnected === null ? (
+                    <p className="text-[10px] text-slate-500">Checking…</p>
+                  ) : metaConnected ? (
+                    <span className="flex items-center gap-1 text-[10px] text-emerald-400">
+                      <CheckCircle2 className="w-2.5 h-2.5" />
+                      Connected
+                    </span>
+                  ) : (
+                    <p className="text-[10px] text-slate-500">Not connected</p>
+                  )}
+                </div>
+                {/* Connect / Disconnect button */}
+                {metaConnected === false && (
+                  <a
+                    href="/api/meta/auth"
+                    title="Connect Meta Ads"
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all flex-shrink-0"
+                  >
+                    <Link2 className="w-3.5 h-3.5" />
+                  </a>
+                )}
+                {metaConnected === true && (
+                  <button
+                    onClick={handleDisconnect}
+                    disabled={disconnecting}
+                    title="Disconnect Meta Ads"
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all flex-shrink-0 disabled:opacity-50"
+                  >
+                    <Link2Off className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Collapsed — show Meta icon only */}
+        {collapsed && !mobile && metaConnected !== null && (
+          <div className="flex justify-center pt-3">
+            <div
+              title={metaConnected ? "Meta Ads: Connected" : "Meta Ads: Not connected"}
+              className={`w-8 h-8 rounded-lg border flex items-center justify-center relative ${
+                metaConnected
+                  ? "bg-[#1877f2]/15 border-[#1877f2]/20"
+                  : "bg-white/5 border-white/10"
+              }`}
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill={metaConnected ? "#1877f2" : "#475569"}>
+                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+              </svg>
+              {metaConnected && (
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-[#071020]" />
+              )}
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* Bottom */}
@@ -136,7 +231,7 @@ export default function Sidebar() {
           )}
         </div>
 
-        {/* Collapsed logout — show as standalone button */}
+        {/* Collapsed logout */}
         {collapsed && !mobile && (
           <button
             onClick={handleLogout}

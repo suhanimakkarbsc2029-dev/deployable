@@ -6,7 +6,6 @@ import {
   Megaphone, ChevronDown, MousePointerClick, Target,
   TrendingUp, IndianRupee, Play, Pause, Zap, RefreshCcw,
 } from "lucide-react"
-import ConnectMetaBanner from "@/components/dashboard/ConnectMetaBanner"
 import { CampaignCardSkeleton } from "@/components/dashboard/Skeletons"
 import { formatINR } from "@/lib/utils"
 import type { MetaCampaign } from "@/lib/meta"
@@ -121,7 +120,30 @@ export default function CampaignsPage() {
       </motion.div>
 
       {/* Connect banner */}
-      {!loading && !connected && <ConnectMetaBanner compact />}
+      {!loading && !connected && (
+        <div className="mb-6 rounded-xl border border-amber-500/20 bg-amber-500/8 p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-center gap-3 flex-1">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/20 flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="#f59e0b">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-amber-400">Showing demo data</p>
+              <p className="text-xs text-slate-400">Connect your Meta Ads account to see live campaign performance.</p>
+            </div>
+          </div>
+          <a
+            href="/api/meta/auth"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1877f2]/15 border border-[#1877f2]/30 text-[#4a9eff] text-sm font-semibold hover:bg-[#1877f2]/25 transition-all whitespace-nowrap flex-shrink-0"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+            </svg>
+            Connect Meta Ads
+          </a>
+        </div>
+      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">

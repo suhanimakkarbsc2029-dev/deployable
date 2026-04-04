@@ -7,11 +7,8 @@ import {
   Smartphone, ArrowRight, Sparkles, RefreshCcw, Cpu,
 } from "lucide-react"
 import type { AIInsight } from "@/app/api/insights/route"
-import {
-  kpiData, websiteKpis, funnelData, campaignsData,
-} from "@/lib/mock-data"
 
-// ── Icon pool — Claude picks severity, we pick icon by position ───────────────
+// ── Icon pool ──────────────────────────────────────────────────────────────────
 const ICONS = [AlertTriangle, TrendingDown, ShoppingCart, Smartphone, TrendingUp]
 
 const severityConfig: Record<string, { color: string; bg: string; dot: string; actionCls: string }> = {
@@ -35,46 +32,67 @@ const severityConfig: Record<string, { color: string; bg: string; dot: string; a
   },
 }
 
-// ── Build metrics payload from mock data (same shape as live data later) ──────
-function buildMetrics() {
-  const funnel = funnelData
-  const topRoas = Math.max(...campaignsData.map((c) => c.roas))
-  const worstRoas = Math.min(...campaignsData.map((c) => c.roas))
+// ── Build metrics from real API data ──────────────────────────────────────────
+async function fetchRealMetrics() {
+  const [metaRes, websiteRes, campaignsRes] = await Promise.allSettled([
+    fetch("/api/meta/insights?date_preset=last_30d").then((r) => r.json()),
+    fetch("/api/website/stats?date_preset=last_30d").then((r) => r.json()),
+    fetch("/api/meta/campaigns?date_preset=last_30d").then((r) => r.json()),
+  ])
+
+  const meta = metaRes.status === "fulfilled" ? metaRes.value : null
+  const website = websiteRes.status === "fulfilled" ? websiteRes.value : null
+  const campaigns = campaignsRes.status === "fulfilled" ? campaignsRes.value : null
+
+  const agg = meta?.data?.aggregate
+  const webData = website?.data
+  const campaignList: Array<{ roas: number }> = campaigns?.data ?? []
+
+  const spend = agg?.spend ?? 0
+  const revenue = agg?.revenue ?? 0
+  const roas = agg?.roas ?? 0
+  const ctr = agg ? parseFloat(((agg.clicks / Math.max(agg.impressions, 1)) * 100).toFixed(2)) : 0
+  const cpc = agg && agg.clicks > 0 ? parseFloat((spend / agg.clicks).toFixed(2)) : 0
+  const orders = webData?.orderCount ?? 0
+  const cac = orders > 0 ? parseFloat((spend / orders).toFixed(0)) : 0
+
+  const topRoas = campaignList.length > 0 ? Math.max(...campaignList.map((c) => c.roas)) : roas
+  const worstRoas = campaignList.length > 0 ? Math.min(...campaignList.map((c) => c.roas)) : roas
+
+  const dropoffs = webData?.funnelDropoffs ?? {
+    visitToProductView: 40,
+    productViewToCart: 55,
+    cartToCheckout: 35,
+    checkoutToPurchase: 25,
+  }
 
   return {
-    roas: kpiData.roas,
-    revenue: kpiData.revenue,
-    adSpend: kpiData.adSpend,
-    orders: kpiData.orders,
-    ctr: 3.2,
-    cpc: 22.4,
-    cac: kpiData.cac,
-    bounceRate: websiteKpis.bounceRate,
-    conversionRate: websiteKpis.conversionRate,
-    cartAbandonmentRate: 72,
-    funnelDropoffs: {
-      visitToProductView: Math.round(((funnel[0].users - funnel[1].users) / funnel[0].users) * 100),
-      productViewToCart: Math.round(((funnel[1].users - funnel[2].users) / funnel[1].users) * 100),
-      cartToCheckout: Math.round(((funnel[2].users - funnel[3].users) / funnel[2].users) * 100),
-      checkoutToPurchase: Math.round(((funnel[3].users - funnel[4].users) / funnel[3].users) * 100),
-    },
+    roas,
+    revenue,
+    adSpend: spend,
+    orders,
+    ctr,
+    cpc,
+    cac,
+    bounceRate: webData?.bounceRate ?? 42,
+    conversionRate: webData?.conversionRate ?? 1.8,
+    cartAbandonmentRate: webData?.cartAbandonmentRate ?? 68,
+    funnelDropoffs: dropoffs,
     topCampaignRoas: topRoas,
     worstCampaignRoas: worstRoas,
-    mobileConversionRate: 1.6,
-    desktopConversionRate: 3.8,
+    mobileConversionRate: webData ? webData.conversionRate * 0.6 : 1.5,
+    desktopConversionRate: webData ? webData.conversionRate * 1.4 : 3.2,
   }
 }
 
-// ── Skeleton card ─────────────────────────────────────────────────────────────
+// ── Skeleton ──────────────────────────────────────────────────────────────────
 function InsightSkeleton() {
   return (
     <div className="rounded-xl border border-white/8 bg-white/3 p-5 animate-pulse">
       <div className="flex items-start gap-4">
         <div className="w-10 h-10 rounded-xl bg-white/5 flex-shrink-0" />
         <div className="flex-1 space-y-2.5">
-          <div className="flex gap-2">
-            <div className="skeleton h-5 w-20 rounded-full" />
-          </div>
+          <div className="skeleton h-5 w-20 rounded-full" />
           <div className="skeleton h-5 w-3/4 rounded" />
           <div className="skeleton h-3.5 w-full rounded" />
           <div className="skeleton h-3.5 w-5/6 rounded" />
@@ -99,7 +117,9 @@ function ThinkingBanner() {
       <Cpu className="w-4 h-4 text-cyan-400 animate-pulse flex-shrink-0" />
       <div className="flex-1">
         <p className="text-sm font-medium text-cyan-300">Claude is analysing your metrics…</p>
-        <p className="text-xs text-slate-500 mt-0.5">Reading ROAS, funnel drop-offs, and campaign performance</p>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Reading live ROAS, funnel drop-offs, and campaign performance
+        </p>
       </div>
       <div className="flex gap-1">
         {[0, 1, 2].map((i) => (
@@ -128,10 +148,13 @@ export default function InsightsPage() {
     setError(null)
 
     try {
+      // Fetch real metrics from Meta + pixel APIs first
+      const metrics = await fetchRealMetrics()
+
       const res = await fetch("/api/insights", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildMetrics()),
+        body: JSON.stringify(metrics),
       })
 
       const json = await res.json() as {
@@ -180,7 +203,7 @@ export default function InsightsPage() {
             <h1 className="text-2xl font-bold text-white">AI Insights</h1>
             <p className="text-sm text-slate-400">
               {source === "claude"
-                ? "Powered by Claude claude-sonnet-4-20250514"
+                ? "Powered by Claude Sonnet · Live data"
                 : "Powered by Deployable Intelligence Engine"}
             </p>
           </div>
@@ -230,7 +253,7 @@ export default function InsightsPage() {
             ) : (
               <>
                 <Sparkles className="w-3.5 h-3.5 text-slate-400" />
-                <span className="text-sm text-slate-400">Demo data</span>
+                <span className="text-sm text-slate-400">Demo mode</span>
               </>
             )}
             {lastUpdated && (
@@ -257,12 +280,9 @@ export default function InsightsPage() {
                   className={`rounded-xl border p-5 ${cfg.bg} hover:scale-[1.005] transition-transform duration-200`}
                 >
                   <div className="flex items-start gap-4">
-                    {/* Icon */}
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${cfg.bg} border`}>
                       <Icon className={`w-5 h-5 ${cfg.color}`} />
                     </div>
-
-                    {/* Content */}
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-2">
                         <span className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-full border ${cfg.bg} ${cfg.color}`}>
@@ -276,13 +296,10 @@ export default function InsightsPage() {
                           </span>
                         )}
                       </div>
-
                       <h3 className="font-bold text-white mb-1.5 leading-tight">{insight.title}</h3>
                       <p className="text-sm text-slate-400 leading-relaxed">{insight.description}</p>
                     </div>
                   </div>
-
-                  {/* Action button */}
                   <div className="mt-4 flex justify-end">
                     <button className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${cfg.actionCls}`}>
                       {insight.action}
@@ -295,7 +312,7 @@ export default function InsightsPage() {
         }
       </div>
 
-      {/* Error note (non-blocking — shown under results when API degraded) */}
+      {/* Error note */}
       {error && !loading && (
         <motion.div
           initial={{ opacity: 0 }}
@@ -320,8 +337,8 @@ export default function InsightsPage() {
           <p className="text-sm text-slate-400">
             <span className="text-cyan-400 font-semibold">Pro tip:</span>{" "}
             {source === "claude"
-              ? "These insights were generated live by Claude based on your current metrics. Hit Refresh to re-analyse with the latest data."
-              : "Add ANTHROPIC_API_KEY to your .env.local to get live AI-generated insights from Claude instead of demo data."}
+              ? "Insights are generated from your live Meta Ads and pixel data. Refresh anytime to analyse the latest numbers."
+              : "Add ANTHROPIC_API_KEY to your environment to get live AI insights. Connect Meta Ads and install the pixel for data-driven analysis."}
           </p>
         </motion.div>
       )}
