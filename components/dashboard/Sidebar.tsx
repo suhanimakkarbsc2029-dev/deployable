@@ -42,10 +42,34 @@ export default function Sidebar() {
   const [loggingOut, setLoggingOut] = useState(false)
   const [metaConnected, setMetaConnected] = useState<boolean | null>(null)
   const [disconnecting, setDisconnecting] = useState(false)
+  const [userName, setUserName] = useState("")
+  const [userEmail, setUserEmail] = useState("")
+  const [userInitials, setUserInitials] = useState("…")
   const pathname = usePathname()
   const router = useRouter()
 
   useEffect(() => {
+    // Load real user profile
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      const email = user.email ?? ""
+      setUserEmail(email)
+      supabase
+        .from("profiles")
+        .select("name")
+        .eq("id", user.id)
+        .single()
+        .then(({ data }) => {
+          const name = data?.name || user.user_metadata?.full_name || email.split("@")[0] || ""
+          setUserName(name)
+          setUserInitials(
+            name.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2) ||
+              email[0].toUpperCase()
+          )
+        })
+    })
+
     fetch("/api/meta/status")
       .then((r) => r.json())
       .then((d) => setMetaConnected(d.connected))
@@ -204,12 +228,12 @@ export default function Sidebar() {
         {/* User row + logout */}
         <div className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all mt-2 ${collapsed && !mobile ? "justify-center px-2" : ""}`}>
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-pink-600 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
-            AK
+            {userInitials}
           </div>
           {(!collapsed || mobile) && (
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">Arjun Kumar</p>
-              <p className="text-xs text-slate-500 truncate">arjun@brand.in</p>
+              <p className="text-sm font-medium text-white truncate">{userName || userEmail.split("@")[0]}</p>
+              <p className="text-xs text-slate-500 truncate">{userEmail}</p>
             </div>
           )}
           {(!collapsed || mobile) && (
