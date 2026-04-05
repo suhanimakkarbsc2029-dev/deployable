@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code")
   const oauthError = searchParams.get("error")
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? origin
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? origin).trim()
 
   if (oauthError || !code) {
     return NextResponse.redirect(
