@@ -32,8 +32,33 @@ const severityConfig: Record<string, { color: string; bg: string; dot: string; a
   },
 }
 
+interface RealMetrics {
+  metaConnected: boolean
+  pixelConnected: boolean
+  roas: number
+  revenue: number
+  adSpend: number
+  orders: number
+  ctr: number
+  cpc: number
+  cac: number
+  bounceRate: number
+  conversionRate: number
+  cartAbandonmentRate: number
+  funnelDropoffs: {
+    visitToProductView: number
+    productViewToCart: number
+    cartToCheckout: number
+    checkoutToPurchase: number
+  }
+  topCampaignRoas: number
+  worstCampaignRoas: number
+  mobileConversionRate: number
+  desktopConversionRate: number
+}
+
 // ── Build metrics from real API data ──────────────────────────────────────────
-async function fetchRealMetrics() {
+async function fetchRealMetrics(): Promise<RealMetrics> {
   const [metaRes, websiteRes, campaignsRes] = await Promise.allSettled([
     fetch("/api/meta/insights?date_preset=last_30d").then((r) => r.json()),
     fetch("/api/website/stats?date_preset=last_30d").then((r) => r.json()),
@@ -43,6 +68,9 @@ async function fetchRealMetrics() {
   const meta = metaRes.status === "fulfilled" ? metaRes.value : null
   const website = websiteRes.status === "fulfilled" ? websiteRes.value : null
   const campaigns = campaignsRes.status === "fulfilled" ? campaignsRes.value : null
+
+  const metaConnected = meta?.connected === true
+  const pixelConnected = website?.hasData === true
 
   const agg = meta?.data?.aggregate
   const webData = website?.data
@@ -67,6 +95,8 @@ async function fetchRealMetrics() {
   }
 
   return {
+    metaConnected,
+    pixelConnected,
     roas,
     revenue,
     adSpend: spend,
@@ -142,14 +172,23 @@ export default function InsightsPage() {
   const [source, setSource] = useState<"claude" | "mock" | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [metaConnected, setMetaConnected] = useState<boolean | null>(null)
+  const [pixelConnected, setPixelConnected] = useState<boolean>(false)
 
   const fetchInsights = useCallback(async () => {
     setLoading(true)
     setError(null)
 
     try {
-      // Fetch real metrics from Meta + pixel APIs first
       const metrics = await fetchRealMetrics()
+      setMetaConnected(metrics.metaConnected)
+      setPixelConnected(metrics.pixelConnected)
+
+      // Don't call Claude if there's no real data to analyse
+      if (!metrics.metaConnected && !metrics.pixelConnected) {
+        setLoading(false)
+        return
+      }
 
       const res = await fetch("/api/insights", {
         method: "POST",
@@ -223,6 +262,41 @@ export default function InsightsPage() {
       <AnimatePresence>
         {loading && <ThinkingBanner />}
       </AnimatePresence>
+
+      {/* Not connected empty state */}
+      {!loading && metaConnected === false && !pixelConnected && (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl border border-white/10 bg-white/3 p-10 text-center"
+        >
+          <div className="w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-500/20 flex items-center justify-center mx-auto mb-5">
+            <Lightbulb className="w-7 h-7 text-amber-400" />
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">No data to analyse yet</h2>
+          <p className="text-slate-400 text-sm mb-8 max-w-sm mx-auto leading-relaxed">
+            Connect your Meta Ads account so Claude can analyse your real ROAS, CTR,
+            campaign performance, and funnel data.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <a
+              href="/api/meta/auth"
+              className="flex items-center gap-2.5 px-5 py-2.5 rounded-xl bg-[#1877f2]/15 border border-[#1877f2]/30 text-[#4a9eff] text-sm font-semibold hover:bg-[#1877f2]/25 transition-all"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+              </svg>
+              Connect Meta Ads
+            </a>
+            <a
+              href="/dashboard/settings"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-white/10 text-slate-400 text-sm font-medium hover:text-white hover:border-white/20 transition-all"
+            >
+              Go to Settings
+            </a>
+          </div>
+        </motion.div>
+      )}
 
       {/* Summary badges */}
       {!loading && insights.length > 0 && (
