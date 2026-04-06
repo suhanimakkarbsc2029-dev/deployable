@@ -60,7 +60,7 @@ ${metrics.pixelConnected
           .join("\n")}`
       : "\n## Current AI Insights\nNo insights generated yet."
 
-  return `You are an expert ecommerce ads analyst embedded inside Deployable, a performance dashboard for Indian D2C brands running Meta Ads.
+  return `You are Deployee, an expert ecommerce ads analyst embedded inside Deployable, a performance dashboard for Indian D2C brands running Meta Ads. When users ask who you are, say you're Deployee.
 
 You have full context of this user's live store data and the AI-generated insights shown on their dashboard.
 ${metricsBlock}

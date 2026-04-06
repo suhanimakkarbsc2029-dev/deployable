@@ -152,7 +152,7 @@ function ThinkingBanner() {
     >
       <Cpu className="w-4 h-4 text-cyan-400 animate-pulse flex-shrink-0" />
       <div className="flex-1">
-        <p className="text-sm font-medium text-cyan-300">Claude is analysing your metrics…</p>
+        <p className="text-sm font-medium text-cyan-300">Deployee is analysing your metrics…</p>
         <p className="text-xs text-slate-500 mt-0.5">
           Reading live ROAS, funnel drop-offs, and campaign performance
         </p>
@@ -280,7 +280,7 @@ function ChatPanel({
           <Bot className="w-4 h-4 text-cyan-400" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-white">Ask Claude</p>
+          <p className="text-sm font-semibold text-white">Ask Deployee</p>
           <p className="text-xs text-slate-500">Knows your live metrics &amp; insights</p>
         </div>
         <button
@@ -453,7 +453,7 @@ export default function InsightsPage() {
             <h1 className="text-2xl font-bold text-white">AI Insights</h1>
             <p className="text-sm text-slate-400">
               {source === "claude"
-                ? "Powered by Claude Sonnet · Live data"
+                ? "Powered by Deployee · Live data"
                 : "Powered by Deployable Intelligence Engine"}
             </p>
           </div>
@@ -477,7 +477,7 @@ export default function InsightsPage() {
             }`}
           >
             <MessageCircle className="w-4 h-4" />
-            Ask Claude
+            Ask Deployee
           </button>
         </div>
       </motion.div>
@@ -536,7 +536,7 @@ export default function InsightsPage() {
             {source === "claude" ? (
               <>
                 <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="text-sm text-cyan-400 font-medium">Live · Claude</span>
+                <span className="text-sm text-cyan-400 font-medium">Live · Deployee</span>
               </>
             ) : (
               <>
@@ -580,7 +580,7 @@ export default function InsightsPage() {
                         {source === "claude" && (
                           <span className="flex items-center gap-1 text-xs text-cyan-500 bg-cyan-500/10 border border-cyan-500/15 px-2 py-0.5 rounded-full font-medium">
                             <Sparkles className="w-2.5 h-2.5" />
-                            Claude
+                            Deployee
                           </span>
                         )}
                       </div>
@@ -594,7 +594,7 @@ export default function InsightsPage() {
                       className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-cyan-400 transition-colors"
                     >
                       <MessageCircle className="w-3.5 h-3.5" />
-                      Ask Claude about this
+                      Ask Deployee about this
                     </button>
                     <button className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${cfg.actionCls}`}>
                       {insight.action}
@@ -631,7 +631,7 @@ export default function InsightsPage() {
           <Sparkles className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-slate-400">
             <span className="text-cyan-400 font-semibold">Pro tip:</span>{" "}
-            Click <span className="text-white font-medium">Ask Claude</span> to chat about any insight or drill into your numbers.
+            Click <span className="text-white font-medium">Ask Deployee</span> to chat about any insight or drill into your numbers.
           </p>
         </motion.div>
       )}
