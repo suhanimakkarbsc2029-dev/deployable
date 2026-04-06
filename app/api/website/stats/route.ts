@@ -45,6 +45,14 @@ export async function GET(request: NextRequest) {
   const since = new Date()
   since.setDate(since.getDate() - days)
 
+  // Check if pixel has ever fired (any events at all, not date-filtered)
+  const { count: totalEverCount } = await supabase
+    .from("events")
+    .select("*", { count: "exact", head: true })
+    .eq("site_id", site.site_id)
+
+  const hasPixel = (totalEverCount ?? 0) > 0
+
   const { data: events } = await supabase
     .from("events")
     .select("event_type, anonymous_id, url, referrer, metadata, timestamp")
@@ -54,7 +62,7 @@ export async function GET(request: NextRequest) {
 
   if (!events || events.length === 0) {
     return NextResponse.json({
-      hasPixel: true,
+      hasPixel,
       hasData: false,
       siteId: site.site_id,
       data: null,

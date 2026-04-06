@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
-import { insightsData } from "@/lib/mock-data"
 
 // Shape Claude must return
 export interface AIInsight {
@@ -12,6 +11,8 @@ export interface AIInsight {
 
 // Metrics payload sent from the client
 interface MetricsPayload {
+  metaConnected?: boolean
+  pixelConnected?: boolean
   roas: number
   revenue: number
   adSpend: number
@@ -35,17 +36,22 @@ interface MetricsPayload {
 }
 
 function buildPrompt(metrics: MetricsPayload): string {
-  return `You are an expert ecommerce ads analyst for Indian D2C brands running Meta Ads.
+  const hasPixel = metrics.pixelConnected === true
+  const hasMeta = metrics.metaConnected !== false
 
-Analyze these store metrics and return exactly 5 actionable insights as a valid JSON array. Be specific, data-driven, and direct. Reference exact numbers from the metrics.
-
-Metrics:
+  const metaSection = hasMeta ? `
+Meta Ads data (last 30 days):
 - ROAS: ${metrics.roas}x
-- Revenue (last 30 days): ₹${(metrics.revenue / 100000).toFixed(1)}L
-- Ad Spend (last 30 days): ₹${(metrics.adSpend / 100000).toFixed(1)}L
-- Orders: ${metrics.orders}
+- Revenue: ₹${(metrics.revenue / 100000).toFixed(1)}L
+- Ad Spend: ₹${(metrics.adSpend / 100000).toFixed(1)}L
 - CTR: ${metrics.ctr}%
 - CPC: ₹${metrics.cpc}
+- Top campaign ROAS: ${metrics.topCampaignRoas}x
+- Worst campaign ROAS: ${metrics.worstCampaignRoas}x` : ""
+
+  const pixelSection = hasPixel ? `
+Website pixel data (last 30 days):
+- Orders: ${metrics.orders}
 - CAC: ₹${metrics.cac}
 - Bounce Rate: ${metrics.bounceRate}%
 - Conversion Rate: ${metrics.conversionRate}%
@@ -55,10 +61,17 @@ Metrics:
   * Product View → Add to Cart: ${metrics.funnelDropoffs.productViewToCart}% drop-off
   * Add to Cart → Checkout: ${metrics.funnelDropoffs.cartToCheckout}% drop-off
   * Checkout → Purchase: ${metrics.funnelDropoffs.checkoutToPurchase}% drop-off
-- Top campaign ROAS: ${metrics.topCampaignRoas}x
-- Worst campaign ROAS: ${metrics.worstCampaignRoas}x
 - Mobile CVR: ${metrics.mobileConversionRate}%
-- Desktop CVR: ${metrics.desktopConversionRate}%
+- Desktop CVR: ${metrics.desktopConversionRate}%` : `
+Website pixel data: NOT AVAILABLE — do not generate insights about website behavior, bounce rate, CVR, funnel, or mobile vs desktop.`
+
+  return `You are an expert ecommerce ads analyst for Indian D2C brands running Meta Ads.
+
+Analyze ONLY the data sources that are available below. Do NOT invent or assume numbers for unavailable data sources.
+${metaSection}
+${pixelSection}
+
+Return exactly 5 actionable insights as a valid JSON array. Be specific and reference exact numbers from the available data only. If a data source is not available, generate insights only from what is available — focus on Meta Ads performance, campaign strategy, creative refresh, budget allocation, and audience targeting.
 
 Return ONLY a raw JSON array — no markdown, no code fences, no explanation. Each object must have exactly these fields:
 - "title": short insight title (max 10 words)
@@ -67,28 +80,17 @@ Return ONLY a raw JSON array — no markdown, no code fences, no explanation. Ea
 - "action": imperative phrase for the CTA button (3-5 words, e.g. "Refresh Ad Creatives")`
 }
 
-// Fallback: return mock insights shaped as AIInsight[]
-function mockInsights(): AIInsight[] {
-  return insightsData.map((d) => ({
-    title: d.title,
-    description: d.description,
-    severity: d.severity as AIInsight["severity"],
-    action: d.action,
-  }))
-}
-
 export async function POST(request: NextRequest) {
-  // Parse body — fall back gracefully if malformed
   let metrics: MetricsPayload
   try {
     metrics = await request.json() as MetricsPayload
   } catch {
-    return NextResponse.json({ insights: mockInsights(), source: "mock" })
+    return NextResponse.json({ insights: [], source: "none", error: "Invalid request" })
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey || apiKey === "your_key_here") {
-    return NextResponse.json({ insights: mockInsights(), source: "mock" })
+    return NextResponse.json({ insights: [], source: "none", error: "ANTHROPIC_API_KEY not configured" })
   }
 
   try {
@@ -97,21 +99,14 @@ export async function POST(request: NextRequest) {
     const message = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 1024,
-      messages: [
-        {
-          role: "user",
-          content: buildPrompt(metrics),
-        },
-      ],
+      messages: [{ role: "user", content: buildPrompt(metrics) }],
     })
 
-    // Extract the text content block
     const textBlock = message.content.find((b) => b.type === "text")
     if (!textBlock || textBlock.type !== "text") {
-      return NextResponse.json({ insights: mockInsights(), source: "mock", error: "No text in response" })
+      return NextResponse.json({ insights: [], source: "none", error: "No text in response" })
     }
 
-    // Strip any accidental markdown fences Claude might include
     const raw = textBlock.text
       .trim()
       .replace(/^```(?:json)?\s*/i, "")
@@ -122,10 +117,9 @@ export async function POST(request: NextRequest) {
     try {
       parsed = JSON.parse(raw) as AIInsight[]
     } catch {
-      return NextResponse.json({ insights: mockInsights(), source: "mock", error: "JSON parse failed" })
+      return NextResponse.json({ insights: [], source: "none", error: "Failed to parse Claude response" })
     }
 
-    // Validate shape — discard malformed entries and fall back if fewer than 3 survive
     const valid = parsed.filter(
       (i) =>
         typeof i.title === "string" &&
@@ -134,13 +128,9 @@ export async function POST(request: NextRequest) {
         typeof i.action === "string"
     )
 
-    if (valid.length < 3) {
-      return NextResponse.json({ insights: mockInsights(), source: "mock", error: "Insufficient valid insights" })
-    }
-
     return NextResponse.json({ insights: valid, source: "claude" })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ insights: mockInsights(), source: "mock", error: msg })
+    return NextResponse.json({ insights: [], source: "none", error: msg })
   }
 }

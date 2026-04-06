@@ -236,11 +236,12 @@ export default function CampaignsPage() {
         }
       </div>
 
-      {/* Empty state when no campaigns */}
-      {!loading && campaigns.length === 0 && connected && (
+      {/* Empty state: connected + live + no campaigns (not an error) */}
+      {!loading && campaigns.length === 0 && connected && isLive && !metaError && (
         <div className="text-center py-16 text-slate-500">
           <Megaphone className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="font-medium">No campaigns found for this date range.</p>
+          <p className="text-sm mt-1">Try selecting a different date range or create a campaign in Meta Ads Manager.</p>
         </div>
       )}
     </div>

@@ -7,7 +7,7 @@ import type { LucideIcon } from "lucide-react"
 interface KPICardProps {
   title: string
   value: string
-  delta: number
+  delta?: number | null
   deltaLabel?: string
   icon: LucideIcon
   iconColor?: string
@@ -25,7 +25,7 @@ export default function KPICard({
   index = 0,
   loading = false,
 }: KPICardProps) {
-  const positive = delta >= 0
+  const positive = (delta ?? 0) >= 0
 
   if (loading) {
     return (
@@ -51,11 +51,15 @@ export default function KPICard({
         </div>
       </div>
       <p className="text-2xl font-black text-white mb-1.5 tracking-tight">{value}</p>
-      <div className={`flex items-center gap-1 text-xs font-semibold ${positive ? "text-emerald-400" : "text-red-400"}`}>
-        {positive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-        <span>{positive ? "+" : ""}{delta}%</span>
-        <span className="text-slate-500 font-normal">{deltaLabel}</span>
-      </div>
+      {delta != null ? (
+        <div className={`flex items-center gap-1 text-xs font-semibold ${positive ? "text-emerald-400" : "text-red-400"}`}>
+          {positive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+          <span>{positive ? "+" : ""}{delta}%</span>
+          <span className="text-slate-500 font-normal">{deltaLabel}</span>
+        </div>
+      ) : (
+        <p className="text-xs text-slate-600">No comparison data</p>
+      )}
     </motion.div>
   )
 }

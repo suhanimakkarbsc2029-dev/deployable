@@ -8,10 +8,12 @@ export async function GET(request: NextRequest) {
   const userCreds = await getMetaCreds()
   const result = await fetchCampaigns(datePreset, userCreds)
 
-  return NextResponse.json({
+  const res = NextResponse.json({
     connected: isMetaConfigured(userCreds),
     source: result.source,
     data: result.data,
     ...(result.error ? { error: result.error } : {}),
   })
+  res.headers.set("Cache-Control", "s-maxage=300, stale-while-revalidate=60")
+  return res
 }

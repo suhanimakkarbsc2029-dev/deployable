@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Lightbulb, AlertTriangle, TrendingUp, TrendingDown, ShoppingCart,
   Smartphone, ArrowRight, Sparkles, RefreshCcw, Cpu,
+  MessageCircle, Send, X, Bot, User,
 } from "lucide-react"
 import type { AIInsight } from "@/app/api/insights/route"
 
@@ -57,6 +58,11 @@ interface RealMetrics {
   desktopConversionRate: number
 }
 
+interface ChatMessage {
+  role: "user" | "assistant"
+  content: string
+}
+
 // ── Build metrics from real API data ──────────────────────────────────────────
 async function fetchRealMetrics(): Promise<RealMetrics> {
   const [metaRes, websiteRes, campaignsRes] = await Promise.allSettled([
@@ -69,7 +75,7 @@ async function fetchRealMetrics(): Promise<RealMetrics> {
   const website = websiteRes.status === "fulfilled" ? websiteRes.value : null
   const campaigns = campaignsRes.status === "fulfilled" ? campaignsRes.value : null
 
-  const metaConnected = meta?.connected === true
+  const metaConnected = meta?.connected === true && meta?.source === "live"
   const pixelConnected = website?.hasData === true
 
   const agg = meta?.data?.aggregate
@@ -88,10 +94,10 @@ async function fetchRealMetrics(): Promise<RealMetrics> {
   const worstRoas = campaignList.length > 0 ? Math.min(...campaignList.map((c) => c.roas)) : roas
 
   const dropoffs = webData?.funnelDropoffs ?? {
-    visitToProductView: 40,
-    productViewToCart: 55,
-    cartToCheckout: 35,
-    checkoutToPurchase: 25,
+    visitToProductView: 0,
+    productViewToCart: 0,
+    cartToCheckout: 0,
+    checkoutToPurchase: 0,
   }
 
   return {
@@ -104,14 +110,14 @@ async function fetchRealMetrics(): Promise<RealMetrics> {
     ctr,
     cpc,
     cac,
-    bounceRate: webData?.bounceRate ?? 42,
-    conversionRate: webData?.conversionRate ?? 1.8,
-    cartAbandonmentRate: webData?.cartAbandonmentRate ?? 68,
+    bounceRate: webData?.bounceRate ?? 0,
+    conversionRate: webData?.conversionRate ?? 0,
+    cartAbandonmentRate: webData?.cartAbandonmentRate ?? 0,
     funnelDropoffs: dropoffs,
     topCampaignRoas: topRoas,
     worstCampaignRoas: worstRoas,
-    mobileConversionRate: webData ? webData.conversionRate * 0.6 : 1.5,
-    desktopConversionRate: webData ? webData.conversionRate * 1.4 : 3.2,
+    mobileConversionRate: webData ? webData.conversionRate * 0.6 : 0,
+    desktopConversionRate: webData ? webData.conversionRate * 1.4 : 0,
   }
 }
 
@@ -165,6 +171,208 @@ function ThinkingBanner() {
   )
 }
 
+// ── Chat panel ────────────────────────────────────────────────────────────────
+function ChatPanel({
+  metrics,
+  insights,
+  onClose,
+}: {
+  metrics: RealMetrics | null
+  insights: AIInsight[]
+  onClose: () => void
+}) {
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      role: "assistant",
+      content: "Hey! I'm your ads analyst. I have full context of your current metrics and the insights above. Ask me anything — why a metric looks off, what to fix first, how to improve ROAS, anything.",
+    },
+  ])
+  const [input, setInput] = useState("")
+  const [streaming, setStreaming] = useState(false)
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages])
+
+  async function send() {
+    const text = input.trim()
+    if (!text || streaming) return
+
+    const userMsg: ChatMessage = { role: "user", content: text }
+    const newMessages = [...messages, userMsg]
+    setMessages(newMessages)
+    setInput("")
+    setStreaming(true)
+
+    // Placeholder assistant message
+    setMessages((prev) => [...prev, { role: "assistant", content: "" }])
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: newMessages,
+          metrics,
+          insights,
+        }),
+      })
+
+      if (!res.ok || !res.body) throw new Error("Request failed")
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let accumulated = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        accumulated += decoder.decode(value, { stream: true })
+        setMessages((prev) => {
+          const updated = [...prev]
+          updated[updated.length - 1] = { role: "assistant", content: accumulated }
+          return updated
+        })
+      }
+    } catch {
+      setMessages((prev) => {
+        const updated = [...prev]
+        updated[updated.length - 1] = {
+          role: "assistant",
+          content: "Sorry, something went wrong. Please try again.",
+        }
+        return updated
+      })
+    } finally {
+      setStreaming(false)
+      inputRef.current?.focus()
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      send()
+    }
+  }
+
+  const SUGGESTIONS = [
+    "Why is my ROAS low?",
+    "What should I fix first?",
+    "How to reduce cart abandonment?",
+    "Which campaign to scale?",
+  ]
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 20, scale: 0.97 }}
+      transition={{ duration: 0.2 }}
+      className="fixed bottom-6 right-6 z-50 w-[400px] max-w-[calc(100vw-2rem)] flex flex-col rounded-2xl border border-white/10 bg-[#080f1e] shadow-2xl shadow-black/50"
+      style={{ height: "520px" }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3.5 border-b border-white/8 flex-shrink-0">
+        <div className="w-8 h-8 rounded-lg bg-cyan-500/15 border border-cyan-500/20 flex items-center justify-center">
+          <Bot className="w-4 h-4 text-cyan-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-white">Ask Claude</p>
+          <p className="text-xs text-slate-500">Knows your live metrics &amp; insights</p>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:text-white hover:bg-white/8 transition-all"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4 min-h-0">
+        {messages.map((msg, i) => (
+          <div key={i} className={`flex gap-2.5 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
+            <div className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center ${
+              msg.role === "assistant"
+                ? "bg-cyan-500/15 border border-cyan-500/20"
+                : "bg-violet-500/15 border border-violet-500/20"
+            }`}>
+              {msg.role === "assistant"
+                ? <Bot className="w-3.5 h-3.5 text-cyan-400" />
+                : <User className="w-3.5 h-3.5 text-violet-400" />
+              }
+            </div>
+            <div className={`max-w-[82%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed ${
+              msg.role === "assistant"
+                ? "bg-white/5 border border-white/8 text-slate-300"
+                : "bg-violet-500/15 border border-violet-500/20 text-white"
+            }`}>
+              {msg.content === "" && streaming ? (
+                <span className="flex gap-1 items-center h-4">
+                  {[0, 1, 2].map((j) => (
+                    <motion.span
+                      key={j}
+                      className="w-1.5 h-1.5 rounded-full bg-slate-500 inline-block"
+                      animate={{ opacity: [0.3, 1, 0.3] }}
+                      transition={{ duration: 1, repeat: Infinity, delay: j * 0.2 }}
+                    />
+                  ))}
+                </span>
+              ) : (
+                <span style={{ whiteSpace: "pre-wrap" }}>{msg.content}</span>
+              )}
+            </div>
+          </div>
+        ))}
+
+        {/* Suggestions — only show after first greeting, before any user message */}
+        {messages.length === 1 && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {SUGGESTIONS.map((s) => (
+              <button
+                key={s}
+                onClick={() => { setInput(s); inputRef.current?.focus() }}
+                className="text-xs px-3 py-1.5 rounded-full border border-white/10 bg-white/3 text-slate-400 hover:text-white hover:border-white/20 transition-all"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input */}
+      <div className="px-3 pb-3 pt-2 flex-shrink-0 border-t border-white/8">
+        <div className="flex items-end gap-2 rounded-xl border border-white/10 bg-white/3 px-3 py-2 focus-within:border-cyan-500/40 transition-colors">
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask about your metrics…"
+            rows={1}
+            className="flex-1 bg-transparent text-sm text-white placeholder-slate-600 resize-none outline-none min-h-[24px] max-h-[96px]"
+            style={{ lineHeight: "1.5" }}
+          />
+          <button
+            onClick={send}
+            disabled={!input.trim() || streaming}
+            className="w-7 h-7 flex-shrink-0 rounded-lg bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 hover:bg-cyan-500/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          >
+            <Send className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <p className="text-[10px] text-slate-700 text-center mt-1.5">Enter to send · Shift+Enter for newline</p>
+      </div>
+    </motion.div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function InsightsPage() {
   const [insights, setInsights] = useState<AIInsight[]>([])
@@ -173,19 +381,22 @@ export default function InsightsPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [metaConnected, setMetaConnected] = useState<boolean | null>(null)
-  const [pixelConnected, setPixelConnected] = useState<boolean>(false)
+  const [metrics, setMetrics] = useState<RealMetrics | null>(null)
+  const [chatOpen, setChatOpen] = useState(false)
 
   const fetchInsights = useCallback(async () => {
     setLoading(true)
     setError(null)
 
     try {
-      const metrics = await fetchRealMetrics()
-      setMetaConnected(metrics.metaConnected)
-      setPixelConnected(metrics.pixelConnected)
+      const m = await fetchRealMetrics()
+      setMetrics(m)
+      setMetaConnected(m.metaConnected)
 
-      // Don't call Claude if there's no real data to analyse
-      if (!metrics.metaConnected && !metrics.pixelConnected) {
+      const hasMetaData = m.metaConnected && (m.adSpend > 0 || m.roas > 0 || m.ctr > 0)
+      const hasPixelData = m.pixelConnected && m.orders > 0
+
+      if (!hasMetaData && !hasPixelData) {
         setLoading(false)
         return
       }
@@ -193,7 +404,7 @@ export default function InsightsPage() {
       const res = await fetch("/api/insights", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(metrics),
+        body: JSON.stringify(m),
       })
 
       const json = await res.json() as {
@@ -248,14 +459,27 @@ export default function InsightsPage() {
           </div>
         </div>
 
-        <button
-          onClick={fetchInsights}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-white/10 text-sm text-slate-400 hover:text-white hover:border-white/20 transition-all bg-white/3 self-start sm:self-auto disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <RefreshCcw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-          {loading ? "Analysing…" : "Refresh insights"}
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={fetchInsights}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-white/10 text-sm text-slate-400 hover:text-white hover:border-white/20 transition-all bg-white/3 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCcw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            {loading ? "Analysing…" : "Refresh"}
+          </button>
+          <button
+            onClick={() => setChatOpen((v) => !v)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-all ${
+              chatOpen
+                ? "border-cyan-500/40 bg-cyan-500/15 text-cyan-400"
+                : "border-white/10 bg-white/3 text-slate-400 hover:text-white hover:border-white/20"
+            }`}
+          >
+            <MessageCircle className="w-4 h-4" />
+            Ask Claude
+          </button>
+        </div>
       </motion.div>
 
       {/* Thinking banner */}
@@ -263,39 +487,29 @@ export default function InsightsPage() {
         {loading && <ThinkingBanner />}
       </AnimatePresence>
 
-      {/* Not connected empty state */}
-      {!loading && metaConnected === false && !pixelConnected && (
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-white/10 bg-white/3 p-10 text-center"
-        >
-          <div className="w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-500/20 flex items-center justify-center mx-auto mb-5">
-            <Lightbulb className="w-7 h-7 text-amber-400" />
-          </div>
-          <h2 className="text-xl font-bold text-white mb-2">No data to analyse yet</h2>
-          <p className="text-slate-400 text-sm mb-8 max-w-sm mx-auto leading-relaxed">
-            Connect your Meta Ads account so Claude can analyse your real ROAS, CTR,
-            campaign performance, and funnel data.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            <a
-              href="/api/meta/auth"
-              className="flex items-center gap-2.5 px-5 py-2.5 rounded-xl bg-[#1877f2]/15 border border-[#1877f2]/30 text-[#4a9eff] text-sm font-semibold hover:bg-[#1877f2]/25 transition-all"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-              </svg>
-              Connect Meta Ads
-            </a>
-            <a
-              href="/dashboard/settings"
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-white/10 text-slate-400 text-sm font-medium hover:text-white hover:border-white/20 transition-all"
-            >
-              Go to Settings
-            </a>
-          </div>
-        </motion.div>
+      {/* Empty state */}
+      {!loading && insights.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          {metaConnected ? (
+            <>
+              <p className="text-slate-400 mb-1">No campaign data yet</p>
+              <p className="text-sm text-slate-600">Insights will appear once your campaigns have spend or activity.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-slate-400 mb-4">Connect your Meta account to get AI insights</p>
+              <a
+                href="/api/meta/auth"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1877f2]/15 border border-[#1877f2]/30 text-[#4a9eff] text-sm font-semibold hover:bg-[#1877f2]/25 transition-all"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                </svg>
+                Connect Meta Ads
+              </a>
+            </>
+          )}
+        </div>
       )}
 
       {/* Summary badges */}
@@ -374,7 +588,14 @@ export default function InsightsPage() {
                       <p className="text-sm text-slate-400 leading-relaxed">{insight.description}</p>
                     </div>
                   </div>
-                  <div className="mt-4 flex justify-end">
+                  <div className="mt-4 flex items-center justify-between">
+                    <button
+                      onClick={() => setChatOpen(true)}
+                      className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-cyan-400 transition-colors"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      Ask Claude about this
+                    </button>
                     <button className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${cfg.actionCls}`}>
                       {insight.action}
                       <ArrowRight className="w-3.5 h-3.5" />
@@ -399,8 +620,8 @@ export default function InsightsPage() {
         </motion.div>
       )}
 
-      {/* Pro tip */}
-      {!loading && (
+      {/* Pro tip — only show when insights are visible */}
+      {!loading && insights.length > 0 && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -410,12 +631,21 @@ export default function InsightsPage() {
           <Sparkles className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
           <p className="text-sm text-slate-400">
             <span className="text-cyan-400 font-semibold">Pro tip:</span>{" "}
-            {source === "claude"
-              ? "Insights are generated from your live Meta Ads and pixel data. Refresh anytime to analyse the latest numbers."
-              : "Add ANTHROPIC_API_KEY to your environment to get live AI insights. Connect Meta Ads and install the pixel for data-driven analysis."}
+            Click <span className="text-white font-medium">Ask Claude</span> to chat about any insight or drill into your numbers.
           </p>
         </motion.div>
       )}
+
+      {/* Chat panel */}
+      <AnimatePresence>
+        {chatOpen && (
+          <ChatPanel
+            metrics={metrics}
+            insights={insights}
+            onClose={() => setChatOpen(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

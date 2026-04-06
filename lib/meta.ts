@@ -8,13 +8,6 @@
  * Priority:  per-user creds  >  env-var token  >  mock data
  */
 
-import {
-  campaignsData,
-  topAdsData,
-  kpiData,
-  revenueVsSpendData,
-} from "@/lib/mock-data"
-
 const BASE = "https://graph.facebook.com/v20.0"
 
 // ─── Credential helpers ───────────────────────────────────────────────────────
@@ -166,7 +159,7 @@ export async function fetchCampaigns(
   overrideCreds?: MetaCreds | null
 ): Promise<{ data: MetaCampaign[]; source: "live" | "mock"; error?: string }> {
   const creds = overrideCreds ?? envCreds()
-  if (!creds) return { data: normaliseMockCampaigns(), source: "mock" }
+  if (!creds) return { data: [], source: "mock" }
 
   try {
     const preset = toDatePreset(datePreset)
@@ -203,7 +196,7 @@ export async function fetchCampaigns(
 
     return { data, source: "live" }
   } catch (err) {
-    return { data: normaliseMockCampaigns(), source: "mock", error: String(err) }
+    return { data: [], source: "mock", error: String(err) }
   }
 }
 
@@ -212,7 +205,8 @@ export async function fetchAccountInsights(
   overrideCreds?: MetaCreds | null
 ): Promise<{ data: AccountInsights; source: "live" | "mock"; error?: string }> {
   const creds = overrideCreds ?? envCreds()
-  if (!creds) return { data: mockAccountInsights(), source: "mock" }
+  const emptyInsights: AccountInsights = { spend: 0, revenue: 0, roas: 0, impressions: 0, clicks: 0, ctr: 0 }
+  if (!creds) return { data: emptyInsights, source: "mock" }
 
   try {
     const preset = toDatePreset(datePreset)
@@ -225,7 +219,7 @@ export async function fetchAccountInsights(
     )
 
     const ins = res.data?.[0]
-    if (!ins) return { data: mockAccountInsights(), source: "mock", error: "No data" }
+    if (!ins) return { data: emptyInsights, source: "live" }
 
     const spend = parseFloat(ins.spend ?? "0")
     const revenue = actionValue(ins.action_values, "purchase")
@@ -242,7 +236,7 @@ export async function fetchAccountInsights(
       source: "live",
     }
   } catch (err) {
-    return { data: mockAccountInsights(), source: "mock", error: String(err) }
+    return { data: emptyInsights, source: "mock", error: String(err) }
   }
 }
 
@@ -251,7 +245,7 @@ export async function fetchDailyInsights(
   overrideCreds?: MetaCreds | null
 ): Promise<{ data: DailyInsight[]; source: "live" | "mock"; error?: string }> {
   const creds = overrideCreds ?? envCreds()
-  if (!creds) return { data: normaliseMockDaily(), source: "mock" }
+  if (!creds) return { data: [], source: "mock" }
 
   try {
     const preset = toDatePreset(datePreset)
@@ -272,7 +266,7 @@ export async function fetchDailyInsights(
 
     return { data, source: "live" }
   } catch (err) {
-    return { data: normaliseMockDaily(), source: "mock", error: String(err) }
+    return { data: [], source: "mock", error: String(err) }
   }
 }
 
@@ -281,7 +275,7 @@ export async function fetchAds(
   overrideCreds?: MetaCreds | null
 ): Promise<{ data: MetaAd[]; source: "live" | "mock"; error?: string }> {
   const creds = overrideCreds ?? envCreds()
-  if (!creds) return { data: normaliseMockAds(), source: "mock" }
+  if (!creds) return { data: [], source: "mock" }
 
   try {
     const preset = toDatePreset(datePreset)
@@ -316,7 +310,7 @@ export async function fetchAds(
 
     return { data, source: "live" }
   } catch (err) {
-    return { data: normaliseMockAds(), source: "mock", error: String(err) }
+    return { data: [], source: "mock", error: String(err) }
   }
 }
 
@@ -333,55 +327,4 @@ function normaliseStatus(s: string): string {
     ARCHIVED: "Paused",
   }
   return map[s?.toUpperCase()] ?? s
-}
-
-function normaliseMockCampaigns(): MetaCampaign[] {
-  return campaignsData.map((c) => ({
-    id: String(c.id),
-    name: c.name,
-    status: c.status,
-    objective: c.objective,
-    spend: c.spend,
-    revenue: c.revenue,
-    roas: c.roas,
-    impressions: c.impressions,
-    clicks: c.clicks,
-    ctr: c.ctr,
-    budget: c.budget,
-  }))
-}
-
-function normaliseMockAds(): MetaAd[] {
-  return topAdsData.map((a) => ({
-    id: a.id,
-    name: a.name,
-    campaign: a.campaign,
-    spend: a.spend,
-    revenue: a.revenue,
-    roas: a.roas,
-    ctr: a.ctr,
-    cpc: a.cpc,
-    impressions: a.impressions,
-    clicks: a.clicks,
-    status: a.status,
-  }))
-}
-
-function mockAccountInsights(): AccountInsights {
-  return {
-    spend: kpiData.adSpend,
-    revenue: kpiData.revenue,
-    roas: kpiData.roas,
-    impressions: 5_840_000,
-    clicks: 142_800,
-    ctr: 2.44,
-  }
-}
-
-function normaliseMockDaily(): DailyInsight[] {
-  return revenueVsSpendData.map((d) => ({
-    date: d.date,
-    spend: d.spend,
-    revenue: d.revenue,
-  }))
 }

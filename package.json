@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.66",
     "@anthropic-ai/sdk": "^0.82.0",
     "@radix-ui/react-accordion": "^1.2.0",
     "@radix-ui/react-avatar": "^1.1.0",
@@ -25,6 +26,7 @@
     "@radix-ui/react-tooltip": "^1.1.2",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.1",
+    "ai": "^6.0.146",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "facebook-nodejs-business-sdk": "^24.0.1",
