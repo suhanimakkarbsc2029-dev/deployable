@@ -17,6 +17,7 @@ import MetaBanner from "@/components/dashboard/MetaBanner"
 import { formatINR } from "@/lib/utils"
 import type { MetaAd, AccountInsights, DailyInsight } from "@/lib/meta"
 import type { DashboardAnalysis, ConversionProblem } from "@/app/api/analysis/route"
+import { AIRA_AGGREGATE, AIRA_ORDERS, AIRA_DAILY, AIRA_ADS, AIRA_ANALYSIS } from "@/lib/aira-demo"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -327,27 +328,36 @@ export default function DashboardPage() {
   const connected = overview?.connected ?? false
   const isLive = overview?.source === "live"
   const metaError = overview?.error ?? null
-  const daily = overview?.daily ?? []
 
-  const liveOrders = webData?.orderCount ?? null
-  const liveRoas = agg?.roas
-  const liveRevenue = agg?.revenue
-  const liveSpend = agg?.spend
-  const liveCac = liveSpend && liveOrders ? Math.round(liveSpend / liveOrders) : null
+  // Use Aira demo data when not connected to Meta
+  const displayAgg: AccountInsights = isLive ? (agg ?? AIRA_AGGREGATE) : AIRA_AGGREGATE
+  const daily: DailyInsight[] = isLive ? (overview?.daily ?? []) : AIRA_DAILY
+  const displayAds: MetaAd[] = isLive ? (overview?.ads ?? []) : AIRA_ADS
+  const demoAnalysis: DashboardAnalysis = AIRA_ANALYSIS
+
+  const liveRoas = displayAgg.roas
+  const liveRevenue = displayAgg.revenue
+  const liveSpend = displayAgg.spend
+  const liveOrders2 = isLive ? (webData?.orderCount ?? null) : AIRA_ORDERS
+  const liveCac = liveSpend && liveOrders2 ? Math.round(liveSpend / liveOrders2) : null
   const liveMer = liveRevenue && liveSpend && liveSpend > 0
     ? parseFloat((liveRevenue / liveSpend).toFixed(2)) : null
 
   const kpis = [
-    { title: "ROAS", value: isLive ? `${liveRoas ?? 0}x` : "—", delta: null, icon: TrendingUp, iconColor: "text-cyan-400" },
-    { title: "Revenue", value: isLive ? formatINR(liveRevenue ?? 0) : "—", delta: null, icon: DollarSign, iconColor: "text-emerald-400" },
-    { title: "Ad Spend", value: isLive ? formatINR(liveSpend ?? 0) : "—", delta: null, icon: Target, iconColor: "text-blue-400" },
-    { title: "Orders", value: liveOrders != null ? liveOrders.toLocaleString("en-IN") : "—", delta: null, icon: ShoppingBag, iconColor: "text-violet-400" },
+    { title: "ROAS", value: `${liveRoas ?? 0}x`, delta: null, icon: TrendingUp, iconColor: "text-cyan-400" },
+    { title: "Revenue", value: formatINR(liveRevenue ?? 0), delta: null, icon: DollarSign, iconColor: "text-emerald-400" },
+    { title: "Ad Spend", value: formatINR(liveSpend ?? 0), delta: null, icon: Target, iconColor: "text-blue-400" },
+    { title: "Orders", value: liveOrders2 != null ? liveOrders2.toLocaleString("en-IN") : "—", delta: null, icon: ShoppingBag, iconColor: "text-violet-400" },
     { title: "CAC", value: liveCac != null ? `₹${liveCac}` : "—", delta: null, icon: Users, iconColor: "text-pink-400" },
     { title: "MER", value: liveMer != null ? `${liveMer}x` : "—", delta: null, icon: BarChart3, iconColor: "text-amber-400" },
   ]
 
-  const fixedCount = analysis
-    ? analysis.problems.filter((p) => {
+  // Show demo analysis for Aira when not live; live analysis overrides when connected
+  const displayAnalysis: DashboardAnalysis | null = isLive ? analysis : demoAnalysis
+  const displayAnalysisLoading = isLive ? analysisLoading : false
+
+  const fixedCount = displayAnalysis
+    ? displayAnalysis.problems.filter((p) => {
         const live = liveMetrics[p.fixCheckKey] ?? null
         if (live === null) return false
         return p.fixCheckDirection === "below" ? live < p.fixCheckThreshold : live > p.fixCheckThreshold
@@ -433,10 +443,10 @@ export default function DashboardPage() {
             className="rounded-xl border border-white/8 bg-white/3 p-5"
           >
             <div className="flex items-center gap-4">
-              {analysisLoading ? (
+              {displayAnalysisLoading ? (
                 <div className="w-24 h-24 rounded-full bg-white/5 animate-pulse flex-shrink-0" />
-              ) : analysis ? (
-                <HealthRing score={analysis.overallHealthScore} />
+              ) : displayAnalysis ? (
+                <HealthRing score={displayAnalysis.overallHealthScore} />
               ) : (
                 <div className="w-24 h-24 rounded-full bg-white/5 flex-shrink-0 flex items-center justify-center">
                   <Brain className="w-8 h-8 text-slate-700" />
@@ -446,29 +456,34 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-2 mb-1.5">
                   <Brain className="w-4 h-4 text-cyan-400" />
                   <span className="text-sm font-semibold text-white">Conversion Health</span>
-                  {analysis && fixedCount > 0 && (
+                  {!isLive && (
+                    <span className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full font-semibold">
+                      Demo · Aira Jewels
+                    </span>
+                  )}
+                  {displayAnalysis && fixedCount > 0 && (
                     <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
                       <CheckCircle2 className="w-3 h-3" />
                       {fixedCount} fixed
                     </span>
                   )}
                 </div>
-                {analysisLoading ? (
+                {displayAnalysisLoading ? (
                   <div className="space-y-2">
                     <div className="skeleton h-4 w-3/4 rounded" />
                     <div className="skeleton h-3 w-1/2 rounded" />
                   </div>
-                ) : analysis ? (
+                ) : displayAnalysis ? (
                   <>
-                    <p className="text-sm text-slate-300 leading-relaxed mb-2">{analysis.summary}</p>
+                    <p className="text-sm text-slate-300 leading-relaxed mb-2">{displayAnalysis.summary}</p>
                     <div className="flex items-center gap-4 text-xs text-slate-500">
                       <span className="flex items-center gap-1">
                         <span className="w-2 h-2 rounded-full bg-slate-600" />
-                        Current CVR: <span className="text-white font-semibold ml-1">{analysis.currentCvr}%</span>
+                        Current CVR: <span className="text-white font-semibold ml-1">{displayAnalysis.currentCvr}%</span>
                       </span>
                       <span className="flex items-center gap-1">
                         <Zap className="w-3 h-3 text-cyan-400" />
-                        Potential CVR: <span className="text-cyan-400 font-semibold ml-1">{analysis.projectedCvrIfAllFixed}%</span>
+                        Potential CVR: <span className="text-cyan-400 font-semibold ml-1">{displayAnalysis.projectedCvrIfAllFixed}%</span>
                       </span>
                     </div>
                   </>
@@ -480,15 +495,15 @@ export default function DashboardPage() {
           </motion.div>
 
           {/* Problem cards */}
-          {analysisLoading ? (
+          {displayAnalysisLoading ? (
             <div className="space-y-3">
               {Array.from({ length: 3 }).map((_, i) => (
                 <div key={i} className="rounded-xl border border-white/8 bg-white/3 p-5 animate-pulse h-40" />
               ))}
             </div>
-          ) : analysis ? (
+          ) : displayAnalysis ? (
             <div className="space-y-3">
-              {analysis.problems.map((p, i) => (
+              {displayAnalysis.problems.map((p, i) => (
                 <ProblemCard
                   key={p.id}
                   problem={p}
@@ -551,7 +566,7 @@ export default function DashboardPage() {
           )}
 
           {/* CVR projection card */}
-          {!loading && analysis && (
+          {!loading && displayAnalysis && (
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
@@ -563,7 +578,7 @@ export default function DashboardPage() {
                 <span className="text-sm font-semibold text-cyan-300">CVR Projection</span>
               </div>
               <div className="space-y-2">
-                {analysis.problems.map((p) => {
+                {displayAnalysis.problems.map((p) => {
                   const live = liveMetrics[p.fixCheckKey] ?? null
                   const fixed = live !== null && (
                     p.fixCheckDirection === "below" ? live < p.fixCheckThreshold : live > p.fixCheckThreshold
@@ -588,7 +603,7 @@ export default function DashboardPage() {
                 })}
                 <div className="pt-2 border-t border-white/8 flex items-center justify-between">
                   <span className="text-xs text-slate-400">Projected CVR</span>
-                  <span className="text-sm font-black text-cyan-300">{analysis.projectedCvrIfAllFixed}%</span>
+                  <span className="text-sm font-black text-cyan-300">{displayAnalysis.projectedCvrIfAllFixed}%</span>
                 </div>
               </div>
             </motion.div>
@@ -608,8 +623,10 @@ export default function DashboardPage() {
             <h2 className="font-semibold text-white">Top Ad Performance</h2>
             <p className="text-xs text-slate-500 mt-0.5">
               Best performing ads this period
-              {overview?.source === "live" && (
+              {isLive ? (
                 <span className="ml-1.5 text-emerald-400 font-medium">● Live</span>
+              ) : (
+                <span className="ml-1.5 text-amber-400 font-medium">Demo · Aira Jewels</span>
               )}
             </p>
           </div>
@@ -636,7 +653,7 @@ export default function DashboardPage() {
                       ))}
                     </tr>
                   ))
-                : (overview?.ads ?? []).map((ad, i) => (
+                : displayAds.map((ad, i) => (
                     <motion.tr
                       key={ad.id}
                       initial={{ opacity: 0 }}
