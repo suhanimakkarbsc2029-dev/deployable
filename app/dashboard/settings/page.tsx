@@ -7,6 +7,7 @@ import {
   CheckCircle2, Code2, RefreshCcw, ExternalLink,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import MetaConnectButtons from "@/components/dashboard/MetaConnectButtons"
 
 interface Profile {
   id: string
@@ -216,13 +217,7 @@ export default function SettingsPage() {
                     Disconnect
                   </button>
                 ) : (
-                  <a
-                    href="/api/meta/auth"
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#1877f2]/30 text-[#4a9eff] text-xs font-semibold hover:bg-[#1877f2]/15 transition-all"
-                  >
-                    <Link2 className="w-3.5 h-3.5" />
-                    Connect
-                  </a>
+                  <MetaConnectButtons size="sm" layout="row" />
                 )}
               </div>
             </div>
